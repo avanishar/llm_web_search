@@ -1,102 +1,79 @@
-import streamlit as st
-import time
-from scraper import scrape_links, initialize_logs
-from cleaning import combine_logs
+from datetime import datetime
+from bs4 import BeautifulSoup
+import os
+import re
+import requests
 
-# --- Streamlit Page Config ---
-st.set_page_config(
-    page_title="LLM Web Search",
-    page_icon="🔍",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+def initialize_logs(topic):
+    logs_dir = "logs"
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    topic_folder = os.path.join(logs_dir, f"{topic}_{timestamp}")
+    os.makedirs(topic_folder, exist_ok=True)
+    return topic_folder
 
-# --- Custom CSS for UI ---
-st.markdown("""
-<style>
-/* Global background */
-body {
-    background-color: #f5f5f5;
-}
+def clean_content(text):
+    boilerplate_patterns = [
+        r"About\s*Press\s*Copyright.*?Google LLC",
+        r"Terms\s*Privacy\s*Policy.*?features",
+        r"All rights reserved\.",
+        r"Contact us.*?Developers",
+        r"How YouTube works.*?Google LLC",
+        r"^(\s*|\n*)$",
+    ]
+    for pattern in boilerplate_patterns:
+        text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
+    lines = [line for line in text.splitlines() if len(line.strip()) > 20]
+    return "\n".join(lines)
 
-/* AI Response box */
-.ai-box {
-    background-color: #f9f9f9;
-    border: 1px solid #ddd;
-    border-radius: 12px;
-    padding: 1rem;
-    margin-top: 1rem;
-    box-shadow: 0px 2px 5px rgba(0,0,0,0.05);
-    font-size: 1rem;
-    color: #111;
-    line-height: 1.6;
-}
+def scrape_links(links, save_logs=True, log_folder=None):
+    combined_content = ""
+    for i, link in enumerate(links, 1):
+        try:
+            response = requests.get(link, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+            if response.status_code == 200:
+                print(f"✅ Successfully scraped {link}")
+                soup = BeautifulSoup(response.content, 'html.parser')
 
-/* Scraped content area */
-.scraped-card {
-    background-color: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 12px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    box-shadow: 0px 2px 4px rgba(0,0,0,0.04);
-}
+                title = soup.find('title')
+                title_text = title.get_text().strip() if title else f"Article_{i}"
 
-/* Buttons */
-button[kind="primary"] {
-    background-color: #333 !important;
-    color: white !important;
-    border-radius: 8px !important;
-}
-button[kind="primary"]:hover {
-    background-color: #444 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+                safe_title = re.sub(r'[^\w\s-]', '', title_text)
+                safe_title = re.sub(r'[-\s]+', '_', safe_title)
 
-# --- Sidebar ---
-st.sidebar.header("🔧 Controls")
-st.sidebar.write("Use this panel to configure your search.")
+                content_selectors = ['article', 'main', '.content', '.post-content', '.entry-content', '.article-content', 'body']
+                content_text = ""
+                for selector in content_selectors:
+                    selected = soup.select_one(selector)
+                    if selected:
+                        content_text = selected.get_text(separator="\n", strip=True)
+                        if content_text:
+                            break
 
-clear_cache = st.sidebar.button("🧹 Clear Cache")
+                if not content_text:
+                    content_text = soup.get_text(separator="\n", strip=True)
 
-# --- Main App UI ---
-st.title("🔍 LLM Web Search")
-st.write("Enter a topic, scrape links, and get an AI-powered summary.")
+                content_text = clean_content(content_text)
 
-topic = st.text_input("Enter Topic", placeholder="e.g., NISAR Satellite")
-num_links = st.slider("Number of links to scrape", 1, 5, 2)
+                markdown_content = f"# {title_text}\n\n**Source:** {link}\n\n**Scraped on:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n---\n\n{content_text}"
 
-# --- Session State ---
-if "cache" not in st.session_state:
-    st.session_state.cache = {}
+                if save_logs and log_folder:
+                    filename = f"{str(i).zfill(3)}_{safe_title}.md"
+                    filepath = os.path.join(log_folder, filename)
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write(markdown_content)
+                    print(f"💾 Saved content to {filepath}")
+                else:
+                    combined_content += markdown_content + "\n\n"
+            else:
+                print(f"⚠️ Could not scrape {link}: HTTP {response.status_code}")
+        except Exception as e:
+            print(f"❌ Failed to scrape {link}: {str(e)}")
 
-if clear_cache:
-    st.session_state.cache.clear()
-    st.success("✅ Cache cleared successfully!")
-
-if st.button("Scrape & Generate Answer"):
-    if not topic.strip():
-        st.warning("Please enter a topic first.")
+    if save_logs and log_folder:
+        print(f"📂 All scraped content saved in: {log_folder}")
+        return None
     else:
-        cache_key = f"{topic}_{num_links}"
-        if cache_key in st.session_state.cache:
-            st.info("⚡ Using cached results")
-            combined_content = st.session_state.cache[cache_key]
-        else:
-            log_folder = initialize_logs(topic)
-            with st.spinner("🔎 Scraping links... This may take a few seconds"):
-                scrape_links([f"https://en.wikipedia.org/wiki/{topic}"], save_logs=True, log_folder=log_folder)
-                combined_content = combine_logs(log_folder)
-                st.session_state.cache[cache_key] = combined_content
-
-        if combined_content:
-            st.markdown("### 📄 Scraped Content")
-            st.markdown(f"<div class='scraped-card'>{combined_content[:2000]}...</div>", unsafe_allow_html=True)
-
-            st.markdown("### 🤖 AI Response")
-            with st.spinner("Thinking..."):
-                time.sleep(2)  # Simulate processing
-                st.markdown("<div class='ai-box'>This is where your AI-generated answer will appear, summarized from the scraped content.</div>", unsafe_allow_html=True)
-        else:
-            st.error("❌ No content found or failed to scrape links.")
+        return combined_content

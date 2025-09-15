@@ -13,6 +13,20 @@ def summarize_answer(answer):
     summary = call_gemini(prompt)
     return summary
 
+# --- Caching Wrappers ---
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def cached_get_links(topic, num_links):
+    return get_links(topic, num_links)
+
+@st.cache_data(ttl=3600)
+def cached_scrape_links(links, save_logs, log_folder):
+    scrape_links(links, save_logs=save_logs, log_folder=log_folder)
+    return log_folder
+
+@st.cache_data(ttl=3600)
+def cached_combine_logs(log_folder):
+    return combine_logs(log_folder)
+
 # --- Streamlit UI setup ---
 st.set_page_config(page_title="AI Web Search & Answer", page_icon="🤖", layout="centered")
 
@@ -90,8 +104,8 @@ if st.button("🔍 Get AI Answer"):
     if topic:
         with st.spinner("Searching and processing..."):
             try:
-                # Get links
-                links = get_links(topic, num_links)
+                # Step 1: Get links (cached)
+                links = cached_get_links(topic, num_links)
                 if not links:
                     st.warning("No links found for your topic. Try a different query.")
                 else:
@@ -100,13 +114,11 @@ if st.button("🔍 Get AI Answer"):
                     for link in links:
                         st.markdown(f"- [{link}]({link})")
 
-                    # Initialize logs
+                    # Step 2: Initialize logs & scrape (cached)
                     log_folder = initialize_logs(topic)
+                    cached_scrape_links(links, save_logs, log_folder)
 
-                    # Scrape content
-                    scrape_links(links, save_logs=save_logs, log_folder=log_folder)
-
-                    # Display each scraped markdown file in an expander
+                    # Step 3: Show scraped content
                     if save_logs:
                         st.markdown("### 📄 Scraped Content from Each Link")
                         md_files = sorted(glob.glob(os.path.join(log_folder, "*.md")))
@@ -123,27 +135,24 @@ if st.button("🔍 Get AI Answer"):
                         else:
                             st.info("No markdown files found in the log folder.")
 
-                    # Combine logs
-                    context_from_logs = combine_logs(log_folder)
+                    # Step 4: Combine logs (cached)
+                    context_from_logs = cached_combine_logs(log_folder)
 
                     if show_scraped:
                         st.markdown("#### Scraped Content (Combined)")
                         st.code(context_from_logs[:2000] + ("..." if len(context_from_logs) > 2000 else ""), language="markdown")
 
-                    # Create prompt
+                    # Step 5: Create prompt & get answer
                     final_prompt = context_combine_prompt(context_from_logs, topic)
-
-                    # Get answer
                     answer = call_gemini(final_prompt)
 
-                    # Summarize answer
+                    # Step 6: Summarize answer
                     summary = summarize_answer(answer)
 
-                    # Display summarized answer in a nice box
+                    # Step 7: Display results
                     st.markdown("### 🤖 AI Summarized Answer")
                     st.markdown(f'<div class="answer-box">{summary}</div>', unsafe_allow_html=True)
 
-                    # Optionally, show full answer in an expander
                     with st.expander("Show Full AI Answer"):
                         st.markdown(answer)
             except Exception as e:

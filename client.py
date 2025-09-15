@@ -19,11 +19,6 @@ def cached_get_links(topic, num_links):
     return get_links(topic, num_links)
 
 @st.cache_data(ttl=3600)
-def cached_scrape_links(links, save_logs, log_folder):
-    scrape_links(links, save_logs=save_logs, log_folder=log_folder)
-    return log_folder
-
-@st.cache_data(ttl=3600)
 def cached_combine_logs(log_folder):
     return combine_logs(log_folder)
 
@@ -46,9 +41,11 @@ with st.sidebar:
 if theme == "🌙 Dark":
     bg_color = "#121212"
     text_color = "#ffffff"
+    answer_box_bg = "#1f2937"  # dark gray box for answers
 else:
     bg_color = "#f5f7fa"
     text_color = "#222"
+    answer_box_bg = "#ffffff"  # clean white box
 
 st.markdown(
     f"""
@@ -63,12 +60,13 @@ st.markdown(
         padding: 2rem;
     }}
     .answer-box {{
-        background: linear-gradient(90deg, #a8edea 0%, #fed6e3 100%);
+        background: {answer_box_bg};
         border-radius: 12px;
-        padding: 1.5em;
-        font-size: 1.2em;
+        padding: 1.2em;
+        font-size: 1.1em;
         font-weight: 500;
-        color: #222;
+        color: {text_color};
+        border: 1px solid rgba(0,0,0,0.1);
         margin-bottom: 1em;
     }}
     </style>
@@ -79,20 +77,11 @@ st.markdown(
 st.markdown('<div class="main">', unsafe_allow_html=True)
 st.title("🤖 AI Web Search & Answer")
 
-with st.expander("ℹ️ How it works", expanded=False):
-    st.markdown(
-        """
-        1. Enter a topic or question.
-        2. The app searches the web, scrapes multiple links, and summarizes an answer using AI.
-        3. Toggle light/dark mode, clear cache, and leave feedback after reading.
-        """
-    )
-
 topic = st.text_input("Enter your topic or question:", placeholder="e.g., latest AI news for today")
 
 if st.button("🔍 Get AI Answer"):
     if topic:
-        with st.spinner("Searching and processing..."):
+        with st.spinner("Searching and scraping..."):
             try:
                 # Step 1: Get links
                 links = cached_get_links(topic, num_links)
@@ -107,8 +96,20 @@ if st.button("🔍 Get AI Answer"):
                     # Step 2: Initialize logs
                     log_folder = initialize_logs(topic)
 
-                    # Step 3: Scrape all links at once
-                    scrape_links(links, save_logs=save_logs, log_folder=log_folder)
+                    # Step 3: Scrape links one by one with progress
+                    progress = st.progress(0)
+                    errors = []
+                    for i, link in enumerate(links):
+                        try:
+                            scrape_links([link], save_logs=save_logs, log_folder=log_folder)
+                        except Exception as e:
+                            errors.append(f"❌ Failed to scrape: {link} ({e})")
+                        progress.progress((i + 1) / len(links))
+                        time.sleep(0.2)  # small delay to smooth progress bar
+                    progress.empty()
+
+                    if errors:
+                        st.warning("\n".join(errors))
 
                     # Step 4: Show logs
                     if save_logs:
@@ -144,22 +145,6 @@ if st.button("🔍 Get AI Answer"):
                     with st.expander("Show Full AI Answer"):
                         st.markdown(answer)
 
-                    # Step 8: Ask for Rating
-                    st.markdown("### ⭐ How helpful was this answer?")
-                    rating = st.radio("Select a rating:", [1, 2, 3, 4, 5], horizontal=True)
-                    if rating:
-                        if rating <= 2:
-                            st.warning("😔 Sorry we missed the mark. You can leave feedback below!")
-                        elif rating == 3:
-                            st.info("🙂 Thanks! We’ll try to improve.")
-                        else:
-                            st.success("🎉 Great! Glad you found this helpful.")
-
-                        feedback = st.text_area("Optional feedback (what to improve?):")
-                        if st.button("Submit Feedback"):
-                            with open("feedback.txt", "a", encoding="utf-8") as f:
-                                f.write(f"Topic: {topic}\nRating: {rating}\nFeedback: {feedback}\n{'='*40}\n")
-                            st.success("✅ Feedback submitted! Thank you.")
             except Exception as e:
                 st.error(f"An error occurred: {e}")
     else:

@@ -14,7 +14,7 @@ def summarize_answer(answer):
     return summary
 
 # --- Caching Wrappers ---
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_data(ttl=3600)
 def cached_get_links(topic, num_links):
     return get_links(topic, num_links)
 
@@ -42,9 +42,9 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("✅ Cache cleared successfully!")
 
-# Apply theme (changes background dynamically)
+# Apply full-page theme
 if theme == "🌙 Dark":
-    bg_color = "#1e1e2f"
+    bg_color = "#121212"
     text_color = "#ffffff"
 else:
     bg_color = "#f5f7fa"
@@ -53,7 +53,7 @@ else:
 st.markdown(
     f"""
     <style>
-    body {{
+    .stApp {{
         background-color: {bg_color};
         color: {text_color};
     }}
@@ -61,7 +61,6 @@ st.markdown(
         background-color: {bg_color};
         border-radius: 16px;
         padding: 2rem;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.07);
     }}
     .answer-box {{
         background: linear-gradient(90deg, #a8edea 0%, #fed6e3 100%);
@@ -71,7 +70,6 @@ st.markdown(
         font-weight: 500;
         color: #222;
         margin-bottom: 1em;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
     }}
     </style>
     """,
@@ -85,12 +83,11 @@ with st.expander("ℹ️ How it works", expanded=False):
     st.markdown(
         """
         1. Enter a topic or question.
-        2. The app searches the web, scrapes content, and summarizes an answer using AI.
-        3. You can toggle light/dark mode and clear cache anytime.
+        2. The app searches the web, scrapes multiple links, and summarizes an answer using AI.
+        3. Toggle light/dark mode, clear cache, and leave feedback after reading.
         """
     )
 
-# Main input
 topic = st.text_input("Enter your topic or question:", placeholder="e.g., latest AI news for today")
 
 if st.button("🔍 Get AI Answer"):
@@ -110,13 +107,8 @@ if st.button("🔍 Get AI Answer"):
                     # Step 2: Initialize logs
                     log_folder = initialize_logs(topic)
 
-                    # Step 3: Scrape with progress bar
-                    progress_bar = st.progress(0)
-                    for i, link in enumerate(links):
-                        scrape_links([link], save_logs=save_logs, log_folder=log_folder)
-                        progress_bar.progress((i + 1) / len(links))
-                        time.sleep(0.2)  # simulate progress for smooth UX
-                    progress_bar.empty()
+                    # Step 3: Scrape all links at once
+                    scrape_links(links, save_logs=save_logs, log_folder=log_folder)
 
                     # Step 4: Show logs
                     if save_logs:
@@ -152,6 +144,22 @@ if st.button("🔍 Get AI Answer"):
                     with st.expander("Show Full AI Answer"):
                         st.markdown(answer)
 
+                    # Step 8: Ask for Rating
+                    st.markdown("### ⭐ How helpful was this answer?")
+                    rating = st.radio("Select a rating:", [1, 2, 3, 4, 5], horizontal=True)
+                    if rating:
+                        if rating <= 2:
+                            st.warning("😔 Sorry we missed the mark. You can leave feedback below!")
+                        elif rating == 3:
+                            st.info("🙂 Thanks! We’ll try to improve.")
+                        else:
+                            st.success("🎉 Great! Glad you found this helpful.")
+
+                        feedback = st.text_area("Optional feedback (what to improve?):")
+                        if st.button("Submit Feedback"):
+                            with open("feedback.txt", "a", encoding="utf-8") as f:
+                                f.write(f"Topic: {topic}\nRating: {rating}\nFeedback: {feedback}\n{'='*40}\n")
+                            st.success("✅ Feedback submitted! Thank you.")
             except Exception as e:
                 st.error(f"An error occurred: {e}")
     else:

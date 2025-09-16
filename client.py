@@ -86,12 +86,15 @@ if st.button("🔍 Get AI Answer"):
                 st.write("🟢 **Scraping links...**")
                 result = scrape_links(links, save_logs=save_logs, log_folder=log_folder)
 
-                st.success(f"✅ Scraped {len(result['success'])} websites successfully.")
-                if result["errors"]:
-                    for link, msg in result["errors"]:
+                # ✅ Wrap in check to avoid crashing
+                success_count = len(result.get('success', []))
+                st.success(f"✅ Scraped {success_count} websites successfully.")
+                errors = result.get("errors", [])
+                if errors:
+                    for link, msg in errors:
                         st.error(f"⚠️ Could not scrape {link}: {msg}")
 
-                if not result["success"]:
+                if success_count == 0:
                     st.error("No content scraped.")
                 else:
                     st.write("🟢 **Combining logs...**")
@@ -103,7 +106,10 @@ if st.button("🔍 Get AI Answer"):
 
                     if show_scraped:
                         st.markdown("#### Scraped Content (Combined)")
-                        st.code(context_from_logs[:2000] + ("..." if len(context_from_logs) > 2000 else ""), language="markdown")
+                        st.code(
+                            context_from_logs[:2000] + ("..." if len(context_from_logs) > 2000 else ""), 
+                            language="markdown"
+                        )
 
                     st.write("🟢 **Sending prompt to LLM...**")
                     final_prompt = context_combine_prompt(context_from_logs, topic)

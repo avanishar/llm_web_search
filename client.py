@@ -59,4 +59,68 @@ def clean_duckduckgo_url(url):
         if 'uddg' in query:
             return unquote(query['uddg'][0])
     if url.startswith("//"):
-        url = "https:
+        url = "https:" + url
+    return url
+
+# --- Main ---
+if st.button("🔍 Get AI Answer"):
+    if topic:
+        with st.spinner("Processing your query..."):
+            try:
+                # Get links
+                links = get_links(topic, num_links)
+                links = [clean_duckduckgo_url(link) for link in links]
+
+                # Initialize logs
+                log_folder = initialize_logs(topic)
+
+                # Scrape links
+                result = scrape_links(links, save_logs=save_logs, log_folder=log_folder)
+                success_links = result.get('success', [])
+                errors = result.get('errors', [])
+
+                if not success_links:
+                    st.warning("No content could be scraped from the links.")
+                    for link, msg in errors:
+                        st.error(f"Could not scrape {link}: {msg}")
+                else:
+                    # Show content based on user selection
+                    context_from_logs = combine_logs(log_folder)
+                    if show_scraped:
+                        if len(context_from_logs) > 10000:
+                            context_from_logs = context_from_logs[:10000]
+                        st.markdown("#### Combined Scraped Content")
+                        st.code(context_from_logs[:3000] + ("..." if len(context_from_logs) > 3000 else ""), language="markdown")
+                    else:
+                        st.markdown("#### Scraped Content per Website")
+                        for log_file in sorted(os.listdir(log_folder)):
+                            if log_file.endswith(".md"):
+                                with open(os.path.join(log_folder, log_file), "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                    st.markdown(f"**{log_file.replace('.md','')}**")
+                                    st.code(content[:3000] + ("..." if len(content) > 3000 else ""), language="markdown")
+                        if len(context_from_logs) > 10000:
+                            context_from_logs = context_from_logs[:10000]
+
+                    # Short answer
+                    final_prompt_short = context_combine_prompt(
+                        context_from_logs, topic + "\nPlease provide a concise answer in 2-3 sentences."
+                    )
+                    answer_short = call_gemini(final_prompt_short)
+                    st.markdown("### 🤖 AI Short Answer")
+                    st.markdown(f'<div class="answer-box-short">{answer_short}</div>', unsafe_allow_html=True)
+
+                    # Detailed summary
+                    final_prompt_full = context_combine_prompt(
+                        context_from_logs, topic + "\nPlease provide a detailed summary of all the information."
+                    )
+                    answer_full = call_gemini(final_prompt_full)
+                    st.markdown("### 📜 AI Detailed Summary")
+                    st.markdown(f'<div class="answer-box-full">{answer_full}</div>', unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+    else:
+        st.warning("Please enter a topic or question first!")
+
+st.markdown('</div>', unsafe_allow_html=True)

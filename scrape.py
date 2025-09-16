@@ -41,7 +41,7 @@ def scrape_links(links, save_logs=True, log_folder=None):
 
     for i, link in enumerate(links[:10], 1):
         try:
-            response = requests.get(link, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+            response = requests.get(link, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code != 200:
                 results["errors"].append((link, f"HTTP {response.status_code}"))
                 continue
@@ -53,13 +53,14 @@ def scrape_links(links, save_logs=True, log_folder=None):
             safe_title = re.sub(r'[^\w\s-]', '', title_text)
             safe_title = re.sub(r'[-\s]+', '_', safe_title)
 
+            # Try multiple selectors to get main content
             content_selectors = ['article', 'main', '.content', '.post-content', '.entry-content', '.article-content', 'body']
             content_text = ""
             for selector in content_selectors:
                 selected = soup.select_one(selector)
                 if selected:
                     content_text = selected.get_text(separator="\n", strip=True)
-                    if content_text:
+                    if len(content_text) > 500:  # ensure enough content
                         break
 
             if not content_text:
@@ -82,4 +83,4 @@ def scrape_links(links, save_logs=True, log_folder=None):
         except Exception as e:
             results["errors"].append((link, str(e)))
 
-    return results  # <-- ALWAYS RETURN a dictionary
+    return results

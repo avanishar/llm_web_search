@@ -1,37 +1,15 @@
 import requests
-import os
-from dotenv import load_dotenv
+from bs4 import BeautifulSoup
 
-load_dotenv()
-
-def get_links(topic, num_links=5):
-    topic = topic.replace(" ", "+")
-    api_key = os.getenv("SERPER_API_KEY")
-    if not api_key:
-        raise ValueError("SERPER_API_KEY not found in environment variables.")
-
-    url = "https://google.serper.dev/search"
-    headers = {
-        "X-API-KEY": api_key,
-        "Content-Type": "application/json"
-    }
-    payload = {"q": topic}
-
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code != 200:
-        raise Exception(f"Serper API error: {response.status_code} {response.text}")
-
-    json_data = response.json()
+def get_links(query, num_results=5):
+    """
+    Get top links for a query using DuckDuckGo (no API key required).
+    """
+    print("\033[96m🔍 Searching for:\033[0m", query)
+    url = f"https://duckduckgo.com/html/?q={query}"
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+    soup = BeautifulSoup(response.text, "html.parser")
     links = []
-
-    for item in json_data.get("organic", []):
-        if "link" in item:
-            links.append(item["link"])
-        if "sitelinks" in item:
-            for sub in item["sitelinks"]:
-                if "link" in sub:
-                    links.append(sub["link"])
-        if len(links) >= num_links:
-            break
-
-    return links[:num_links]
+    for a in soup.select(".result__a")[:num_results]:
+        links.append(a["href"])
+    return links

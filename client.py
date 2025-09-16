@@ -6,7 +6,7 @@ from llm import call_gemini, context_combine_prompt
 from urllib.parse import urlparse, parse_qs, unquote
 import os
 
-# --- Streamlit UI setup ---
+# --- Streamlit UI ---
 st.set_page_config(page_title="AI Web Search & Answer", page_icon="🤖", layout="wide")
 
 st.markdown(
@@ -28,21 +28,21 @@ st.markdown(
 st.markdown('<div class="main">', unsafe_allow_html=True)
 st.title("🤖 AI Web Search & Answer")
 
-# --- How it works for users ---
+# --- How it works ---
 st.markdown(
     """
     <div class="how-it-works">
     <h4>📝 How it works:</h4>
     1. Enter a topic or question.<br>
-    2. The app finds top web links and scrapes content.<br>
-    3. Content is either combined or shown per website.<br>
-    4. AI provides a short answer and a detailed summary.<br>
+    2. App finds top links and scrapes content.<br>
+    3. Show combined content or content per website.<br>
+    4. AI provides short answer & detailed summary.<br>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# Sidebar controls
+# Sidebar
 with st.sidebar:
     st.header("Settings")
     num_links = st.slider("Number of links to scrape", 1, 10, 3)
@@ -51,7 +51,7 @@ with st.sidebar:
 
 topic = st.text_input("Enter your topic or question:", placeholder="e.g., latest AI news for today")
 
-# --- DuckDuckGo URL cleaner ---
+# DuckDuckGo cleaner
 def clean_duckduckgo_url(url):
     if "duckduckgo.com/l/?" in url:
         parsed = urlparse(url)
@@ -62,7 +62,7 @@ def clean_duckduckgo_url(url):
         url = "https:" + url
     return url
 
-# --- Main action ---
+# --- Main ---
 if st.button("🔍 Get AI Answer"):
     if topic:
         with st.spinner("Processing your query..."):
@@ -71,56 +71,5 @@ if st.button("🔍 Get AI Answer"):
                 links = get_links(topic, num_links)
                 links = [clean_duckduckgo_url(link) for link in links]
 
-                # Initialize logs
-                log_folder = initialize_logs(topic)
-
-                # Scrape links
-                result = scrape_links(links, save_logs=save_logs, log_folder=log_folder)
-                success_links = result.get('success', [])
-                errors = result.get('errors', [])
-
-                if not success_links:
-                    st.warning("No content could be scraped from the links.")
-                    for link, msg in errors:
-                        st.error(f"Could not scrape {link}: {msg}")
-                else:
-                    if show_scraped:
-                        # Show combined content
-                        context_from_logs = combine_logs(log_folder)
-                        if len(context_from_logs) > 10000:
-                            context_from_logs = context_from_logs[:10000]
-                        st.markdown("#### Combined Scraped Content")
-                        st.code(context_from_logs[:2000] + ("..." if len(context_from_logs) > 2000 else ""), language="markdown")
-                    else:
-                        # Show content per website
-                        st.markdown("#### Scraped Content per Website")
-                        for log_file in sorted(os.listdir(log_folder)):
-                            if log_file.endswith(".md"):
-                                with open(os.path.join(log_folder, log_file), "r", encoding="utf-8") as f:
-                                    content = f.read()
-                                    st.markdown(f"**{log_file.replace('.md','')}**")
-                                    st.code(content[:2000] + ("..." if len(content) > 2000 else ""), language="markdown")
-
-                        # Combine context for AI anyway
-                        context_from_logs = combine_logs(log_folder)
-                        if len(context_from_logs) > 10000:
-                            context_from_logs = context_from_logs[:10000]
-
-                    # Short answer
-                    final_prompt_short = context_combine_prompt(context_from_logs, topic, mode="short")
-                    answer_short = call_gemini(final_prompt_short)
-                    st.markdown("### 🤖 AI Short Answer")
-                    st.markdown(f'<div class="answer-box-short">{answer_short}</div>', unsafe_allow_html=True)
-
-                    # Detailed summary
-                    final_prompt_full = context_combine_prompt(context_from_logs, topic, mode="detailed")
-                    answer_full = call_gemini(final_prompt_full)
-                    st.markdown("### 📜 AI Detailed Summary")
-                    st.markdown(f'<div class="answer-box-full">{answer_full}</div>', unsafe_allow_html=True)
-
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-    else:
-        st.warning("Please enter a topic or question first!")
-
-st.markdown('</div>', unsafe_allow_html=True)
+                # Logs
+                log_folder = initialize_

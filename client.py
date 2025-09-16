@@ -59,17 +59,4 @@ def clean_duckduckgo_url(url):
         if 'uddg' in query:
             return unquote(query['uddg'][0])
     if url.startswith("//"):
-        url = "https:" + url
-    return url
-
-# --- Main ---
-if st.button("🔍 Get AI Answer"):
-    if topic:
-        with st.spinner("Processing your query..."):
-            try:
-                # Get links
-                links = get_links(topic, num_links)
-                links = [clean_duckduckgo_url(link) for link in links]
-
-                # Logs
-                log_folder = initialize_
+        url = "https:

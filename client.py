@@ -3,6 +3,7 @@ from get_links import get_links
 from scrape import scrape_links, initialize_logs
 from cleaning import combine_logs
 from llm import call_gemini, context_combine_prompt
+from urllib.parse import urlparse, parse_qs, unquote
 import glob
 import os
 
@@ -54,6 +55,14 @@ st.markdown(
         margin-bottom: 1em;
         box-shadow: 0 2px 12px rgba(0,0,0,0.2);
     }
+    .how-it-works {
+        background: #fef3c7;
+        border-radius: 12px;
+        padding: 1em;
+        font-size: 1em;
+        margin-bottom: 1em;
+        color: #92400e;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -61,6 +70,21 @@ st.markdown(
 
 st.markdown('<div class="main">', unsafe_allow_html=True)
 st.title("🤖 AI Web Search & Answer")
+
+# --- How it works for users ---
+st.markdown(
+    """
+    <div class="how-it-works">
+    <h4>📝 How it works:</h4>
+    1. Enter a topic or question in the input box.<br>
+    2. The app finds the top web links related to your query.<br>
+    3. It scrapes content from these links.<br>
+    4. The content is combined and sent to the AI (LLM) to generate a concise answer.<br>
+    5. You get a summarized AI answer along with optional scraped content.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Sidebar controls
 with st.sidebar:
@@ -71,6 +95,21 @@ with st.sidebar:
 
 topic = st.text_input("Enter your topic or question:", placeholder="e.g., latest AI news for today")
 
+# --- DuckDuckGo URL cleaner ---
+def clean_duckduckgo_url(url):
+    """Extract the real target URL from DuckDuckGo redirect links."""
+    if "duckduckgo.com/l/?" in url:
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query)
+        if 'uddg' in query:
+            real_url = unquote(query['uddg'][0])
+            return real_url
+    # Ensure full scheme
+    if url.startswith("//"):
+        url = "https:" + url
+    return url
+
+# --- Main action ---
 if st.button("🔍 Get AI Answer"):
     if topic:
         st.write("🟢 **Starting process...**")
@@ -78,6 +117,8 @@ if st.button("🔍 Get AI Answer"):
             try:
                 st.write("🟢 **Getting links...**")
                 links = get_links(topic, num_links)
+                # Clean DuckDuckGo redirect URLs
+                links = [clean_duckduckgo_url(link) for link in links]
                 st.success(f"Found {len(links)} links.")
 
                 log_folder = initialize_logs(topic)
@@ -86,7 +127,7 @@ if st.button("🔍 Get AI Answer"):
                 st.write("🟢 **Scraping links...**")
                 result = scrape_links(links, save_logs=save_logs, log_folder=log_folder)
 
-                # ✅ Wrap in check to avoid crashing
+                # ✅ Safe handling of scraping results
                 success_count = len(result.get('success', []))
                 st.success(f"✅ Scraped {success_count} websites successfully.")
                 errors = result.get("errors", [])
@@ -105,21 +146,3 @@ if st.button("🔍 Get AI Answer"):
                         context_from_logs = context_from_logs[:10000]
 
                     if show_scraped:
-                        st.markdown("#### Scraped Content (Combined)")
-                        st.code(
-                            context_from_logs[:2000] + ("..." if len(context_from_logs) > 2000 else ""), 
-                            language="markdown"
-                        )
-
-                    st.write("🟢 **Sending prompt to LLM...**")
-                    final_prompt = context_combine_prompt(context_from_logs, topic)
-                    answer = call_gemini(final_prompt)
-
-                    st.markdown("### 🤖 AI Answer")
-                    st.markdown(f'<div class="answer-box">{answer}</div>', unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-    else:
-        st.warning("Please enter a topic or question first!")
-
-st.markdown('</div>', unsafe_allow_html=True)
